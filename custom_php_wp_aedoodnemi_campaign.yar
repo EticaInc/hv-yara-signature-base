@@ -1,13 +1,16 @@
-rule custom_php_wp_aedoodnemi_dropper_CUST {
+rule PHP_WP_Aedoodnemi_Dropper_CUST {
     meta:
-        description = "Detects WordPress dropper and webshell component using rot13 C2 domain"
+        description = "Detects WordPress dropper and webshell component using rot13 C2 domains used by the Aedoodnemi campaign."
         author = "Security Team"
         severity = "CRITICAL"
         date = "2026-03-04"
 
     strings:
-        // C2 domain obfuscated with rot13
-        $c2_rot13 = "ncv.nrqbbqnrmv.sha"
+        $php = "<?php" ascii
+
+        // C2 domains obfuscated with rot13
+        $c2_rot13_1 = "ncv.nrqbbqnrmv.sha"
+        $c2_rot13_2 = "ncv.xhgbgb.fof"
 
         // Specific trigger parameters
         $get_param1 = "'cuquoo'"
@@ -17,17 +20,20 @@ rule custom_php_wp_aedoodnemi_dropper_CUST {
         $form_html = "<input type=\"hidden\" name=\"path\" value=\"$path/$file\">"
 
     condition:
-        $c2_rot13 or ($get_param1 and $get_param2 and $form_html)
+        filesize < 3MB and $php and
+        (1 of ($c2_rot13_*) or ($get_param1 and $get_param2 and $form_html))
 }
 
-rule custom_php_wp_aedoodnemi_backdoor_CUST {
+rule PHP_WP_Aedoodnemi_Backdoor_CUST {
     meta:
-        description = "Detects persistent WordPress backdoor modifying header.php"
+        description = "Detects persistent WordPress backdoors sharing the Aedoodnemi campaign's hardcoded password hash, including header.php and theme functions.php variants."
         author = "Security Team"
         severity = "CRITICAL"
         date = "2026-03-04"
 
     strings:
+        $php = "<?php" ascii
+
         // Hardcoded backdoor hash/password
         $hardcoded_pass = "Zgc5c4MXrK42MQ4F8YpQL/+fflvUNPlfnyDNGK/X/wEfeQ=="
 
@@ -38,6 +44,10 @@ rule custom_php_wp_aedoodnemi_backdoor_CUST {
         // Custom decryption function
         $func_name = "function wp_cd("
 
+        // Infection marker searched for or injected into theme functions.php
+        $functions_marker = "$algo = \\'default\\'; $pass ="
+
     condition:
-        $hardcoded_pass and (1 of ($obf_str*) or $func_name)
+        filesize < 3MB and $php and
+        $hardcoded_pass and (1 of ($obf_str*) or $func_name or $functions_marker)
 }

@@ -11,7 +11,6 @@ rule HTML_SEO_Spam_Madridbet_CUST {
         severity = "HIGH"
         date = "2026-01-13"
         threat_type = "SEO Spam"
-        hash_sample = "Calculated from finding"
 
     strings:
         // Core Branding & Title Indicators
