@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+
 mapfile -d '' root_rules < <(
-  find . -maxdepth 1 -type f \( -name '*.yar' -o -name '*.yara' \) -print0 \
+  find "$repo_root" -maxdepth 1 -type f \
+    \( -name '*.yar' -o -name '*.yara' \) -print0 \
     | sort -z
 )
 
@@ -12,7 +15,8 @@ if (( ${#root_rules[@]} == 0 )); then
 fi
 
 mapfile -d '' nested_rules < <(
-  find . -mindepth 2 -type f \( -name '*.yar' -o -name '*.yara' \) -print0 \
+  find "$repo_root" -mindepth 2 -type f \
+    \( -name '*.yar' -o -name '*.yara' \) -print0 \
     | sort -z
 )
 
