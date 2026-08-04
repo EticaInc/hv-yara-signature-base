@@ -1,4 +1,4 @@
-rule BACKDOOR_PHP_Boss_ShadowAdmin_CUST {
+rule PHP_Boss_ShadowAdmin_CUST {
     meta:
         description = "Detects 'Boss' persistent backdoor that creates hidden admin user and installs as mu-plugin"
         author = "Security Team"

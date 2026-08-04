@@ -1,4 +1,4 @@
-rule custom_php_webshell_kapankapan_CUST {
+rule PHP_Webshell_Kapankapan_CUST {
     meta:
         description = "Detects password protected webshell using kapankapan password and hex obfuscation"
         author = "Security Team"

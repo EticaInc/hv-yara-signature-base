@@ -1,4 +1,4 @@
-rule Suspicious_PHP_WordSalad_Obfuscator_Megareactness {
+rule PHP_WordSalad_Obfuscator_CUST {
     meta:
         description = "Detects PHP files obfuscated with a word-salad generator, characterized by extremely long alphanumeric strings and concatenated variable/function names."
         author = "Antigravity"

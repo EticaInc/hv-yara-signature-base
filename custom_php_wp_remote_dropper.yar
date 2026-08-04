@@ -31,7 +31,8 @@ rule PHP_WP_Remote_File_Dropper_CUST
         $url_ecolider and
         all of ($path_*) and
         $http_func and
-        1 of ($curl_*) and
+        $curl_return and
+        $curl_follow and
         $doc_root and
         $fwrite and
         $fopen_w

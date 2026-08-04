@@ -1,4 +1,4 @@
-rule custom_php_seo_spam_celtabet_CUST {
+rule PHP_SEO_Spam_Celtabet_CUST {
     meta:
         description = "Detects Celtabet gambling SEO spam/doorway pages"
         author = "Security Team"
