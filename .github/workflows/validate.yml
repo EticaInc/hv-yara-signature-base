@@ -1,0 +1,32 @@
+name: Validate YARA rules
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Cache YARA-X CLI
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/yr
+          key: yara-x-cli-1.9.0-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Install YARA-X CLI
+        run: |
+          if ! command -v yr >/dev/null 2>&1; then
+            cargo install yara-x-cli --version 1.9.0 --locked
+          fi
+
+      - name: Validate rules
+        run: bash scripts/validate-rules.sh
