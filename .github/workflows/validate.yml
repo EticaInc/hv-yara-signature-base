@@ -32,3 +32,11 @@ jobs:
 
       - name: Validate rules
         run: bash scripts/validate-rules.sh
+
+      # Runs before the rule tests: an identifier leak should fail the build even when the
+      # rules themselves are correct, and this check needs no engine.
+      - name: Check for internal identifiers
+        run: python3 scripts/check-identifiers.py
+
+      - name: Run rule tests
+        run: bash tests/run-rule-tests.sh
