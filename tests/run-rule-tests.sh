@@ -112,6 +112,29 @@ else
   done
 fi
 
+# ------------------------------------------------------------------ generated positives
+# Fixtures for rules with a filesize floor are generated here rather than committed, so the
+# repository holds no bulky malware-shaped artifact. Each generator writes one fixture to the
+# path it is given; the result is asserted exactly like a committed positive.
+shopt -s nullglob
+generators=("$HERE/fixtures/generators"/*.sh)
+shopt -u nullglob
+if [ "${#generators[@]}" -gt 0 ]; then
+  echo
+  echo "== generated positive fixtures: each MUST match at least one rule =="
+  for g in "${generators[@]}"; do
+    gname="$(basename "$g" .sh)"
+    target="$TMP/$gname.php"
+    if ! bash "$g" "$target" >"$TMP/generr" 2>&1; then
+      bad "$gname  generator failed"; sed 's/^/       /' "$TMP/generr"; continue
+    fi
+    n=$("$YR" scan "$ALL" "$target" 2>/dev/null | wc -l)
+    sz=$(wc -c < "$target")
+    if [ "$n" -ge 1 ]; then ok "$gname (${sz}B, generated)  (${n} rule/s)"
+    else bad "$gname (${sz}B, generated)  no match"; fi
+  done
+fi
+
 # ------------------------------------------------------------------ negative fixtures
 echo
 echo "== negative fixtures: each MUST NOT match =="
