@@ -9,16 +9,26 @@
     produced ZERO matches. The payload uses a custom substitution cipher with no plaintext eval,
     base64_decode, gzinflate or str_rot13, so entropy- and eval-based rules never fire.
 
-    RELATIONSHIP TO custom_php_byte_feeder_io_backdoor.yar — that rule is RETAINED.
+    THE LEGACY BYTE FEEDER RULE LIVES HERE TOO, at the end of this file.
+    PHP_Byte_Feeder_IO_Backdoor_CUST moved in from custom_php_byte_feeder_io_backdoor.yar so the
+    whole family sits in one file. The rule NAME is unchanged, so existing suppressions and
+    finding history keep working.
+
     It requires `2 of ($plugin_*)` — "Byte Feeder IO", "charlottescott.com/wp/byte-feeder-io",
     "Text Domain: byte-feeder-io" — which a genuine plugin header for the original variant
-    satisfies, so it still covers that variant and must not be removed without a regression
-    test against 5af5af…89c4.
+    satisfies, so it still covers that variant and must not be dropped without a regression test
+    against 5af5af…89c4. What it does NOT do is survive the rebrand: all three cover strings
+    changed, and `grep -c charlottescott` returns 0 on every live copy seen since. Cover metadata
+    is generated per drop, so DO NOT key on plugin identity for this family — that is why every
+    other rule here is structural. The two approaches are complementary, not redundant.
 
-    What it does NOT do is survive the rebrand: all three cover strings changed, and
-    `grep -c charlottescott` returns 0 on every live copy seen since. Cover metadata is
-    generated per drop, so DO NOT key on plugin identity for this family — that is why the
-    rules below are structural. The two rule sets are complementary, not redundant.
+    ONE FILE, ONE FINDING — rule ordering is load-bearing.
+    The scanner emits one event per matching rule and does not deduplicate, so overlapping rules
+    inflate finding_count and duplicate log events. The slot-specific rules are therefore defined
+    FIRST and the generic decoder rule LAST, with the generic one excluding every specific rule
+    by reference. A file is reported by the most specific rule that describes it, once.
+    Consequence worth knowing: suppressing a specific rule does not hand its files back to the
+    generic rule — they become unreported. Suppress by finding, not by rule, for this family.
 
     SEVEN AUTO-EXECUTION SLOTS PER DOCROOT. Each can rewrite the others, so removing a subset is
     reseeded by the survivors. Three removal attempts failed for this reason.
@@ -92,36 +102,6 @@ rule PHP_SC_Toolkit_Theme_Injection_CUST {
         )
 }
 
-rule PHP_SC_Toolkit_Cipher_Decoder_CUST {
-    meta:
-        description = "Detects the SC toolkit's substitution-cipher decoder shape, which survived the rebrand intact. Deliberately family-level rather than sample-level: the binary and all cover metadata rotate per drop, this does not."
-        author = "Security Team"
-        severity = "HIGH"
-        date = "2026-08-06"
-        family = "SC toolkit, observed version 4.0.3"
-        note = "Carries NO plaintext eval/base64_decode/gzinflate/str_rot13, which is why the entire public base ruleset returned zero matches. Function names are per-drop random: aubxlskv8123dn, oqq5krm2g1nssrx3h, tywo2auctcfmj, esufhylw31pbu, _w3xwp7ztovlmiv4t, n25oj2q898ejyod45oc1, ugy96qqz0j7zq5vpoe."
-    strings:
-        $php     = "<?php" ascii
-        // exact literal as seen in the drop-ins and theme injection
-        $decoder = "static $a=null;if($a===null){$a=array(" ascii
-        // whitespace-tolerant form. The large mu-plugin/plugin implant inserts runs of spaces
-        // between tokens ("defined(x(0))     or    exit;"), which defeats the literal above.
-        $decoder_ws = /static\s+\$[a-z]\s*=\s*null\s*;\s*if\s*\(\s*\$[a-z]\s*===\s*null\s*\)\s*\{\s*\$[a-z]\s*=\s*array\s*\(/ ascii
-        $guard   = /if\s*\(\s*!\s*function_exists\s*\(\s*'[a-z_][a-z0-9_]{8,24}'\s*\)\s*\)\s*\{\s*function\s+[a-z_][a-z0-9_]{8,24}\s*\(\s*\$[a-z0-9_]{1,12}\s*\)\s*\{/ ascii
-        // WordPress reach used by the payload
-        $wp_a    = "wp_insert_user" ascii
-        $wp_b    = "wp_set_auth_cookie" ascii
-        $wp_c    = "WPMU_PLUGIN_DIR" ascii
-        $wp_d    = "file_put_contents" ascii
-    condition:
-        filesize < 2MB
-        and $php
-        and (
-            (any of ($decoder, $decoder_ws) and $guard)
-            or (any of ($decoder, $decoder_ws) and 2 of ($wp_a, $wp_b, $wp_c, $wp_d))
-        )
-}
-
 rule PHP_SC_Toolkit_Implant_Body_CUST {
     meta:
         description = "Detects the SC toolkit's large implant body as dropped into mu-plugins and as an ordinary plugin (slots 4 and 5). Carries NO SC_* marker, so the marker rule does not cover it. Identified structurally: an obfuscated ABSPATH guard, constant-returning trampoline functions, whitespace-insertion obfuscation, and randomly named identifiers reused hundreds of times."
@@ -173,8 +153,89 @@ rule PHP_SC_Toolkit_Prepend_Loader_CUST {
         // Matching a bare "auto_prepend_file" fires on Wordfence's own .user.ini
         // (auto_prepend_file = '.../wordfence-waf.php'), a CRITICAL-severity false positive
         // on every WordPress host running it. Keep this anchored to the hex8 filename.
-        $ini  = /auto_prepend_file\s*=\s*["']?([^"'\r\n]*\/)?[0-9a-f]{8}\.php/ ascii
+        // The trailing group anchors the end of the filename: without it, "9eb24bb1.php.disabled"
+        // and "9eb24bb1.phpxyz" also match. Accepts a closing quote, whitespace or newline,
+        // an inline comment, or end of file.
+        $ini  = /auto_prepend_file\s*=\s*["']?([^"'\r\n]*\/)?[0-9a-f]{8}\.php(["'\s;]|$)/ ascii
     condition:
         (filesize < 4KB and $stub and $isf)
         or (filesize < 1KB and $ini)
+}
+
+/*
+    LEGACY VARIANT — the original "Byte Feeder IO" cover identity.
+    Moved here from custom_php_byte_feeder_io_backdoor.yar so the family lives in one file.
+    Name preserved exactly for suppression and finding-history compatibility.
+*/
+rule PHP_Byte_Feeder_IO_Backdoor_CUST {
+    meta:
+        description = "Detects the Byte Feeder IO malicious WordPress plugin using a substitution-table decoder to conceal credential theft, remote payload retrieval, hidden administrator access, and persistence"
+        author = "Security Team"
+        severity = "CRITICAL"
+        date = "2026-07-23"
+        family = "SC toolkit — original cover identity, pre-rebrand"
+        note = "Keys on plugin identity, which the toolkit rotates per drop, so this covers the ORIGINAL variant only. Post-rebrand copies are caught structurally by the rules above. Do not extend this rule with new cover identities; add structural coverage instead."
+        hash = "5af5afceeb6ef681d6becedac5b31b26a0a0d81bcc6023b2f03682b3679a89c4"
+
+    strings:
+        $php = "<?php" ascii
+
+        // Malicious plugin disguise
+        $plugin_name = "Byte Feeder IO" ascii nocase
+        $plugin_uri = "charlottescott.com/wp/byte-feeder-io" ascii nocase
+        $plugin_domain = "Text Domain:       byte-feeder-io" ascii nocase
+
+        // Substitution-table decoder used to hide C2 and backdoor behavior
+        $decoder_init = "static $a=null;if($a===null){$a=array(" ascii
+        $alphabet_f = "$f='AB'.'SP'.'TH3'.'.1'.'0WMU'.'_LGI'.'NDR/'" ascii
+        $alphabet_t = "$t='O7'.'Fnvt'.'W5.9'" ascii
+        $decoder_loop = "$r=\"\";for($j=0;$j<strlen($e);$j++){$p=strpos($t,$e[$j]);" ascii
+        $decoder_map = "$r.=($p===false)?$e[$j]:$f[$p];" ascii
+
+    condition:
+        filesize < 500KB and
+        $php at 0 and
+        2 of ($plugin_*) and
+        3 of ($decoder_init, $alphabet_f, $alphabet_t, $decoder_loop, $decoder_map)
+}
+
+/*
+    GENERIC FALLBACK — defined last on purpose.
+    Every slot-specific rule above is excluded by reference, so a file is reported once by the
+    most specific rule that describes it. This rule exists to catch decoder-bearing files that
+    none of the specific rules recognise: an unobserved slot, or a future repackaging.
+*/
+rule PHP_SC_Toolkit_Cipher_Decoder_CUST {
+    meta:
+        description = "Detects the SC toolkit's substitution-cipher decoder shape, which survived the rebrand intact. Deliberately family-level rather than sample-level: the binary and all cover metadata rotate per drop, this does not. Fires only when no slot-specific rule in this file already covers the file, so one file yields one finding."
+        author = "Security Team"
+        severity = "HIGH"
+        date = "2026-08-06"
+        family = "SC toolkit, observed version 4.0.3"
+        note = "Carries NO plaintext eval/base64_decode/gzinflate/str_rot13, which is why the entire public base ruleset returned zero matches. Function names are per-drop random: aubxlskv8123dn, oqq5krm2g1nssrx3h, tywo2auctcfmj, esufhylw31pbu, _w3xwp7ztovlmiv4t, n25oj2q898ejyod45oc1, ugy96qqz0j7zq5vpoe."
+    strings:
+        $php     = "<?php" ascii
+        // exact literal as seen in the drop-ins and theme injection
+        $decoder = "static $a=null;if($a===null){$a=array(" ascii
+        // whitespace-tolerant form. The large mu-plugin/plugin implant inserts runs of spaces
+        // between tokens ("defined(x(0))     or    exit;"), which defeats the literal above.
+        $decoder_ws = /static\s+\$[a-z]\s*=\s*null\s*;\s*if\s*\(\s*\$[a-z]\s*===\s*null\s*\)\s*\{\s*\$[a-z]\s*=\s*array\s*\(/ ascii
+        $guard   = /if\s*\(\s*!\s*function_exists\s*\(\s*'[a-z_][a-z0-9_]{8,24}'\s*\)\s*\)\s*\{\s*function\s+[a-z_][a-z0-9_]{8,24}\s*\(\s*\$[a-z0-9_]{1,12}\s*\)\s*\{/ ascii
+        // WordPress reach used by the payload
+        $wp_a    = "wp_insert_user" ascii
+        $wp_b    = "wp_set_auth_cookie" ascii
+        $wp_c    = "WPMU_PLUGIN_DIR" ascii
+        $wp_d    = "file_put_contents" ascii
+    condition:
+        filesize < 2MB
+        and $php
+        and (
+            (any of ($decoder, $decoder_ws) and $guard)
+            or (any of ($decoder, $decoder_ws) and 2 of ($wp_a, $wp_b, $wp_c, $wp_d))
+        )
+        // one finding per file: yield to any slot-specific rule in this file
+        and not PHP_SC_Toolkit_Marker_CUST
+        and not PHP_SC_Toolkit_Theme_Injection_CUST
+        and not PHP_SC_Toolkit_Implant_Body_CUST
+        and not PHP_Byte_Feeder_IO_Backdoor_CUST
 }
