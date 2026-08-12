@@ -9,12 +9,16 @@
     produced ZERO matches. The payload uses a custom substitution cipher with no plaintext eval,
     base64_decode, gzinflate or str_rot13, so entropy- and eval-based rules never fire.
 
-    WHY THE PREVIOUS CUSTOM RULE IS DEAD.
-    custom_php_byte_feeder_io_backdoor.yar, removed in the same change that added this file,
-    required `2 of ($plugin_*)` — "Byte Feeder IO", "charlottescott.com/wp/byte-feeder-io",
-    "Text Domain: byte-feeder-io". All three vanished in the rebrand, so the condition became
-    unsatisfiable: `grep -c charlottescott` returns 0 on every live copy. Cover metadata is
-    generated per drop. DO NOT key on plugin identity for this family.
+    RELATIONSHIP TO custom_php_byte_feeder_io_backdoor.yar — that rule is RETAINED.
+    It requires `2 of ($plugin_*)` — "Byte Feeder IO", "charlottescott.com/wp/byte-feeder-io",
+    "Text Domain: byte-feeder-io" — which a genuine plugin header for the original variant
+    satisfies, so it still covers that variant and must not be removed without a regression
+    test against 5af5af…89c4.
+
+    What it does NOT do is survive the rebrand: all three cover strings changed, and
+    `grep -c charlottescott` returns 0 on every live copy seen since. Cover metadata is
+    generated per drop, so DO NOT key on plugin identity for this family — that is why the
+    rules below are structural. The two rule sets are complementary, not redundant.
 
     SEVEN AUTO-EXECUTION SLOTS PER DOCROOT. Each can rewrite the others, so removing a subset is
     reseeded by the survivors. Three removal attempts failed for this reason.
@@ -39,7 +43,7 @@
 
 rule PHP_SC_Toolkit_Marker_CUST {
     meta:
-        description = "Detects the SC toolkit's own slot markers (SC_DB_BEGIN / SC_ADV_BEGIN / SC_TH_BEGIN / SC_TH_END). Highest-confidence indicator for this family; written deliberately by the toolkit and present in every observed drop-in and theme injection."
+        description = "Detects the SC toolkit's drop-in slot markers (SC_DB_BEGIN/END, SC_ADV_BEGIN/END) in the db.php and advanced-cache.php slots. Highest-confidence indicator for this family; written deliberately by the toolkit. The theme slot's SC_TH_* markers are covered by PHP_SC_Toolkit_Theme_Injection_CUST, which owns them exclusively so one file does not raise two findings."
         author = "Security Team"
         severity = "CRITICAL"
         date = "2026-08-06"
@@ -48,10 +52,12 @@ rule PHP_SC_Toolkit_Marker_CUST {
         hash_variant_a = "6d48cf5c7c960b3a4aed7cc5ba58616d606899cf1f5e3d0f357c57bc7f0d0262"
         hash_variant_b = "7b043477210b65e1f18f54523aacd0cb9b1ecbbabc2e854feaf673ee23ce1e47"
     strings:
-        // <slot>_BEGIN|END : <version> : <hex8>   e.g. SC_TH_BEGIN:4.0.3:9eb24bb1
-        $marker = /SC_(DB|ADV|TH)_(BEGIN|END):[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,3}:[0-9a-f]{8}/ ascii
+        $php = "<?php" ascii
+        // <slot>_BEGIN|END : <version> : <hex8>   e.g. SC_DB_BEGIN:4.0.3:9eb24bb1
+        // TH is deliberately excluded here; see the description.
+        $marker = /SC_(DB|ADV)_(BEGIN|END):[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,3}:[0-9a-f]{8}/ ascii
     condition:
-        filesize < 2MB and $marker
+        filesize < 2MB and $php and $marker
 }
 
 rule PHP_SC_Toolkit_Theme_Injection_CUST {
@@ -65,6 +71,9 @@ rule PHP_SC_Toolkit_Theme_Injection_CUST {
         hash_theme_injected_a = "74d410b44121b98bcdd13f65fce8ca93ebb1ca543b1a87ec7f85bd284c8823c1"
         hash_theme_injected_b = "9b8dbe5c0f40610f756a50d204dcbe55443f9f55c2b5bee708ec2cdc3aa74b94"
     strings:
+        $php      = "<?php" ascii
+        // This rule owns SC_TH_* exclusively — PHP_SC_Toolkit_Marker_CUST covers DB and ADV
+        // only, so an injected functions.php raises one finding rather than two.
         $th_begin = /SC_TH_BEGIN:[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,3}:[0-9a-f]{8}/ ascii
         $th_end   = /SC_TH_END:[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,3}:[0-9a-f]{8}/ ascii
         // decoder wrapper: guard + randomly named function + cipher-array init, all on one line
@@ -76,6 +85,7 @@ rule PHP_SC_Toolkit_Theme_Injection_CUST {
         $theme_c  = "wp_enqueue_" ascii
     condition:
         filesize < 2MB
+        and $php
         and (
             any of ($th_begin, $th_end)
             or ($decoder and $guard and any of ($theme_a, $theme_b, $theme_c))
@@ -158,8 +168,12 @@ rule PHP_SC_Toolkit_Prepend_Loader_CUST {
         // the stub: suppressed include of a same-named dotfile
         $stub = /@?include_once[\s(]*["'][^"']*\/\.[0-9a-f]{8}\.php["']/ ascii
         $isf  = "is_file" ascii
-        // .user.ini content (matched when the scanner is pointed at ini files too)
-        $ini  = "auto_prepend_file" ascii
+        // .user.ini content (matched when the scanner is pointed at ini files too).
+        // The directive must point at an 8-hex-character stub, which is the SC shape.
+        // Matching a bare "auto_prepend_file" fires on Wordfence's own .user.ini
+        // (auto_prepend_file = '.../wordfence-waf.php'), a CRITICAL-severity false positive
+        // on every WordPress host running it. Keep this anchored to the hex8 filename.
+        $ini  = /auto_prepend_file\s*=\s*["']?([^"'\r\n]*\/)?[0-9a-f]{8}\.php/ ascii
     condition:
         (filesize < 4KB and $stub and $isf)
         or (filesize < 1KB and $ini)
