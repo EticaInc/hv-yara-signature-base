@@ -22,11 +22,24 @@
     is generated per drop, so DO NOT key on plugin identity for this family — that is why every
     other rule here is structural. The two approaches are complementary, not redundant.
 
-    ONE FILE, ONE FINDING — rule ordering is load-bearing.
-    The scanner emits one event per matching rule and does not deduplicate, so overlapping rules
-    inflate finding_count and duplicate log events. The slot-specific rules are therefore defined
-    FIRST and the generic decoder rule LAST, with the generic one excluding every specific rule
-    by reference. A file is reported by the most specific rule that describes it, once.
+    GENERIC YIELDS TO SPECIFIC — rule ordering is load-bearing.
+    The scanner emits one event per matching rule and does not deduplicate, so an overlapping
+    pair inflates finding_count and duplicates log events. The five slot-specific rules are
+    therefore defined FIRST and the generic decoder rule LAST, excluding all five by reference.
+    A file that a specific rule already describes is not also reported generically.
+
+    What this does and does not guarantee — stated precisely, because the stronger claim is
+    tempting and false:
+      * GUARANTEED: the generic decoder rule never fires alongside a specific rule in this file.
+      * NOT guaranteed: that any file yields exactly one finding. The five specific rules are
+        PEERS, not a priority chain. They describe different persistence slots, and a file
+        carrying markers for two slots — e.g. both SC_DB_* and SC_TH_* — matches both rules and
+        reports twice. That is deliberate: such a file is genuinely anomalous, the toolkit
+        writes those markers into different files, and collapsing it to one finding would hide
+        the fact that two slots landed in one place. Imposing an order among peers would mean
+        declaring that a DB drop-in outranks a theme injection, which carries no operational
+        meaning.
+
     Consequence worth knowing: suppressing a specific rule does not hand its files back to the
     generic rule — they become unreported. Suppress by finding, not by rule, for this family.
 
@@ -145,6 +158,7 @@ rule PHP_SC_Toolkit_Prepend_Loader_CUST {
         hash_stub = "3e07127100f43d5d6e572575e03c008ae820460ae789236d851fd54ce92abbd2"
         hash_payload = "bf292e84f299767ded9034ba2c45e4ee1851a2396d1d56ab267f55de24a6896f"
     strings:
+        $php  = "<?php" ascii
         // the stub: suppressed include of a same-named dotfile
         $stub = /@?include_once[\s(]*["'][^"']*\/\.[0-9a-f]{8}\.php["']/ ascii
         $isf  = "is_file" ascii
@@ -158,7 +172,10 @@ rule PHP_SC_Toolkit_Prepend_Loader_CUST {
         // an inline comment, or end of file.
         $ini  = /auto_prepend_file\s*=\s*["']?([^"'\r\n]*\/)?[0-9a-f]{8}\.php(["'\s;]|$)/ ascii
     condition:
-        (filesize < 4KB and $stub and $isf)
+        // $php is required on the stub branch only. The stub is PHP; the .user.ini branch
+        // matches an ini file, which has no PHP open tag. Without this, a plain text file
+        // quoting loader code -- an incident note, a runbook -- raises a CRITICAL finding.
+        (filesize < 4KB and $php and $stub and $isf)
         or (filesize < 1KB and $ini)
 }
 
@@ -233,9 +250,12 @@ rule PHP_SC_Toolkit_Cipher_Decoder_CUST {
             (any of ($decoder, $decoder_ws) and $guard)
             or (any of ($decoder, $decoder_ws) and 2 of ($wp_a, $wp_b, $wp_c, $wp_d))
         )
-        // one finding per file: yield to any slot-specific rule in this file
+        // Yield to every slot-specific rule in this file, so a file already described by a
+        // specific rule is not also reported generically. All five are listed; omitting one
+        // silently reintroduces a duplicate, which is how the prepend-loader case was missed.
         and not PHP_SC_Toolkit_Marker_CUST
         and not PHP_SC_Toolkit_Theme_Injection_CUST
         and not PHP_SC_Toolkit_Implant_Body_CUST
+        and not PHP_SC_Toolkit_Prepend_Loader_CUST
         and not PHP_Byte_Feeder_IO_Backdoor_CUST
 }
