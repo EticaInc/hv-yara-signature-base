@@ -9,11 +9,19 @@ rule PHP_WP_SysIntegrity_Backdoor_CUST {
     strings:
         $php = "<?php" ascii
 
-        // Anti-removal: blocks deactivation/deletion with a distinctive shared
-        // cover message claiming other plugins depend on this one
+        // Anti-removal cover message. On its own this is just English text a
+        // legitimate plugin-dependency guard could plausibly also show, so the
+        // condition below never accepts it alone -- it must co-occur with the
+        // actual blocking mechanism or a malicious-account indicator.
         $deactivate_block = "Cannot Deactivate Plugin" ascii
         $delete_block = "Cannot Delete Plugin" ascii
         $shared_block_text = "cannot be deactivated or deleted until the plugins that require it are deactivated or deleted" ascii
+
+        // The actual anti-removal mechanism: functions that wp_die()-block
+        // deactivation/deletion, as opposed to the cover message alone
+        $func_deactivation_msg = "function sys_integrity_deactivation_message()" ascii
+        $func_deletion_msg = "function sys_integrity_deletion_message()" ascii
+        $func_delete_plugin_msg = "function sys_integrity_delete_plugin()" ascii
 
         // Rogue admin creation with hex-obfuscated credential constants
         $create_user_call = "wp_create_user(SYS_INT_USER, SYS_INT_PASS, SYS_INT_EMAIL)" ascii
@@ -33,7 +41,15 @@ rule PHP_WP_SysIntegrity_Backdoor_CUST {
     condition:
         filesize < 500KB and $php and
         (
-            (2 of ($deactivate_block, $delete_block, $shared_block_text))
+            (
+                (2 of ($deactivate_block, $delete_block, $shared_block_text))
+                and
+                (
+                    1 of ($func_deactivation_msg, $func_deletion_msg, $func_delete_plugin_msg)
+                    or
+                    1 of ($create_user_call, $define_user, $define_pass, $func_ensure_user, $func_hide_user, $func_hide_plugin_all, $func_check_integrity)
+                )
+            )
             or
             ($create_user_call and 2 of ($func_ensure_user, $func_hide_user, $func_hide_plugin_all, $func_check_integrity))
             or
