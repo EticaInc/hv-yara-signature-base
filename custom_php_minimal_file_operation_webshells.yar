@@ -9,9 +9,8 @@ rule PHP_Minimal_Rename_Uploader_CUST {
         $php = "<?php" ascii
         $rename_source = "rename(trim($_POST['fname']), trim($_POST['sname']))" ascii
         $upload = "move_uploaded_file($_FILES['file']['tmp_name'], $_FILES['file']['name'])" ascii
-        $request_ok_probe = "<?php ?><?php if(isset($_REQUEST[\"ok\"])){die(\">ok<\");};?>" ascii
     condition:
-        filesize < 10KB and $php and $rename_source and $upload and not $request_ok_probe
+        filesize < 10KB and $php and $rename_source and $upload
 }
 
 rule PHP_Minimal_GET_File_Writer_CUST {
@@ -28,7 +27,6 @@ rule PHP_Minimal_GET_File_Writer_CUST {
         $download = "file_get_contents($b)" ascii
         $open = "fopen($a, \"w\")" ascii
         $write = "fwrite($fp,$acticle" ascii
-        $request_ok_probe = "<?php ?><?php if(isset($_REQUEST[\"ok\"])){die(\">ok<\");};?>" ascii
     condition:
-        filesize < 10KB and $php and all of ($destination, $source, $download, $open, $write) and not $request_ok_probe
+        filesize < 10KB and $php and all of ($destination, $source, $download, $open, $write)
 }

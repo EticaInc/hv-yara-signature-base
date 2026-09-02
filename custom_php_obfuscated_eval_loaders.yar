@@ -12,9 +12,8 @@ rule PHP_Numeric_Dispatch_Loader_CUST {
         $reverse = "array_reverse(" ascii
         $split = "PREG_SPLIT_NO_EMPTY" ascii
         $globals = "$GLOBALS[" ascii
-        $request_ok_probe = "<?php ?><?php if(isset($_REQUEST[\"ok\"])){die(\">ok<\");};?>" ascii
     condition:
-        filesize < 100KB and $php and $reversed_table and $delimiter and 3 of ($reverse, $split, $globals) and not $request_ok_probe
+        filesize < 100KB and $php and $reversed_table and $delimiter and 3 of ($reverse, $split, $globals)
 }
 
 rule PHP_Split_Base64_Eval_Loader_CUST {
@@ -29,9 +28,8 @@ rule PHP_Split_Base64_Eval_Loader_CUST {
         $split_decoder = "array_map(\"base64\".\"_deco\".\"de\"" ascii
         $strip_spaces = "str_replace(\" \",\"\"" ascii
         $mapped_eval = "eval($ftkkzwyqklz[0])" ascii
-        $request_ok_probe = "<?php ?><?php if(isset($_REQUEST[\"ok\"])){die(\">ok<\");};?>" ascii
     condition:
-        filesize < 100KB and $php and all of ($split_decoder, $strip_spaces, $mapped_eval) and not $request_ok_probe
+        filesize < 100KB and $php and all of ($split_decoder, $strip_spaces, $mapped_eval)
 }
 
 rule PHP_Self_Embedded_Rot13_Loader_CUST {
@@ -47,9 +45,8 @@ rule PHP_Self_Embedded_Rot13_Loader_CUST {
         $decode_chain = "base64_decode(strrev(str_rot13(" ascii
         $eval = "serialize(eval(" ascii
         $replace = "preg_replace(" ascii
-        $request_ok_probe = "<?php ?><?php if(isset($_REQUEST[\"ok\"])){die(\">ok<\");};?>" ascii
     condition:
-        filesize < 100KB and $php and all of ($self_read, $decode_chain, $eval, $replace) and not $request_ok_probe
+        filesize < 100KB and $php and all of ($self_read, $decode_chain, $eval, $replace)
 }
 
 rule PHP_Revert_Data_Eval_Loader_CUST {
@@ -66,9 +63,8 @@ rule PHP_Revert_Data_Eval_Loader_CUST {
         $safe_revert = "function safe_revert(" ascii
         $key = "hash('sha256', 'framework', true)" ascii
         $eval = "eval($revertedContent)" ascii
-        $request_ok_probe = "<?php ?><?php if(isset($_REQUEST[\"ok\"])){die(\">ok<\");};?>" ascii
     condition:
-        filesize < 100KB and $php and all of ($payload, $revert, $safe_revert, $key, $eval) and not $request_ok_probe
+        filesize < 100KB and $php and all of ($payload, $revert, $safe_revert, $key, $eval)
 }
 
 rule PHP_FilesQuarantines_AES_Loader_CUST {
@@ -85,9 +81,8 @@ rule PHP_FilesQuarantines_AES_Loader_CUST {
         $cipher = "AES-256-CBC" ascii
         $payload = "generateEncryptedCertStringFromCsr" ascii
         $eval = "eval($sendMessage)" ascii
-        $request_ok_probe = "<?php ?><?php if(isset($_REQUEST[\"ok\"])){die(\">ok<\");};?>" ascii
     condition:
-        filesize < 100KB and $php and all of ($class, $decryptor, $cipher, $payload, $eval) and not $request_ok_probe
+        filesize < 100KB and $php and all of ($class, $decryptor, $cipher, $payload, $eval)
 }
 
 rule PHP_UserAgent_RC4_Loader_CUST {
@@ -105,7 +100,6 @@ rule PHP_UserAgent_RC4_Loader_CUST {
         $stream = "$box[$i]=ord($key[$i%$key_length])" ascii
         $integrity = "substr(md5(substr($result,8).$key),0,8)" ascii
         $eval = "eval($result)" ascii
-        $request_ok_probe = "<?php ?><?php if(isset($_REQUEST[\"ok\"])){die(\">ok<\");};?>" ascii
     condition:
-        filesize < 100KB and $php and all of ($comment_extract, $user_agent, $key_hash, $stream, $integrity, $eval) and not $request_ok_probe
+        filesize < 100KB and $php and all of ($comment_extract, $user_agent, $key_hash, $stream, $integrity, $eval)
 }
