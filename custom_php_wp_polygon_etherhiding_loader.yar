@@ -28,10 +28,14 @@ rule PHP_WP_Polygon_EtherHiding_Loader_CUST {
         $unicode_bracket_access = /\[\s*"(\\u[0-9a-fA-F]{4}){3,}"\s*\]/ ascii
 
         // What actually makes this an EtherHiding loader rather than generic
-        // obfuscated JS: real JSON-RPC eth_call markers, independent of any
-        // function/variable name in this build
-        $jsonrpc_lit = "\"jsonrpc\":" ascii
-        $eth_call_lit = "\"method\":\"eth_call\"" ascii
+        // obfuscated JS: the Ethereum JSON-RPC "eth_call" method, independent of
+        // any function/variable name in this build. Whitespace/quote-tolerant so
+        // a formatting change across campaign drops (spaces around the colon,
+        // single vs double quotes) does not slip past. A bare "jsonrpc": marker
+        // was intentionally dropped: JSON-RPC is used by many benign plugins, so
+        // it is too generic to serve as the corroborating blockchain signal --
+        // "eth_call" is the on-chain-specific token that actually earns it.
+        $eth_call_lit = /["']method["']\s*:\s*["']eth_call["']/ ascii
 
     condition:
         filesize < 3MB and $php and
@@ -41,5 +45,5 @@ rule PHP_WP_Polygon_EtherHiding_Loader_CUST {
             1 of ($reverse_trick, $unicode_bracket_access)
         )
         and
-        1 of ($jsonrpc_lit, $eth_call_lit)
+        $eth_call_lit
 }
