@@ -35,6 +35,13 @@ rule PHP_WP_SecurityHelper_UserConcealer_CUST {
         $guard_del   = "guard_user_delete" ascii
         // legacy concealment artifact shared with the rogue-admin ecosystem
         $legacy      = "_pre_user_id" ascii
+        // Fixed WP hook name + stock core string for the edit-screen guard.
+        // Unlike the guard_*/hide_* method names above (which are just this
+        // build's identifiers), these are part of the WordPress API surface
+        // and cannot be renamed away, so branch (b) survives a full method
+        // rename plus a change of the _pre_user_id meta key.
+        $hook_uedit  = /['"]load-user-edit\.php['"]/ ascii
+        $wpdie_inval = "Invalid user ID." ascii
 
     condition:
         filesize < 200KB and
@@ -49,13 +56,16 @@ rule PHP_WP_SecurityHelper_UserConcealer_CUST {
             // (b) Rename-resistant behavioral fingerprint: four independent
             //     concealment techniques co-occurring -- secret-?sp self-hide from
             //     the plugin list, hiding user IDs from the users query, faking the
-            //     user counts, and one corroborating concealment marker. Keyed on
-            //     fixed WordPress hook names the attacker cannot rename away.
+            //     user counts, and one corroborating concealment marker. The
+            //     first three clauses key on fixed WordPress hook names the
+            //     attacker cannot rename away; the corroborating set now also
+            //     offers two fixed-API markers so the branch does not depend
+            //     solely on this build's renameable method names.
             (
                 $sp_bypass and $all_plugins and
                 $pre_user and 1 of ($sql_notin, $sql_neq) and
                 1 of ($pre_count, $views_u) and
-                1 of ($guard_edit, $guard_del, $legacy, $hide_fn)
+                1 of ($guard_edit, $guard_del, $legacy, $hide_fn, $hook_uedit, $wpdie_inval)
             )
         )
 }
