@@ -19,8 +19,12 @@ rule PHP_NOX_Cloak_Shell_CUST {
         $cloak_comment = "vi-fm3-cloak" ascii
 
         // --- Behavioral markers (technique, less tied to the NOX name) ---
-        // Hidden panel gate
-        $wpmc_gate = "$_GET['wpmc']==='1'" ascii
+        // Hidden panel gate. Whitespace/quote-tolerant: the literal form
+        // "$_GET['wpmc']==='1'" is defeated by ordinary PHP formatting (a
+        // single space around ===, or double quotes on the key), and this is
+        // one of only two strings gating branch (b), so a brittle match there
+        // would quietly disable the rename-resistant branch.
+        $wpmc_gate = /\$_GET\s*\[\s*['"]wpmc['"]\s*\]\s*===?\s*['"]1['"]/ ascii
         // Self-rewriting single-file token auth: compare a hardcoded CONST hash
         // against sha256 of the request token
         $token_auth = /hash_equals\(\s*_?[A-Z][A-Z0-9_]{3,}\s*,\s*hash\(\s*['"]sha256['"]\s*,/ ascii
