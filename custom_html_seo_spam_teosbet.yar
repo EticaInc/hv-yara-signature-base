@@ -8,8 +8,12 @@ rule HTML_SEO_Spam_Teosbet_CUST {
         hash = "ee6b7923897183b5e122d4cb864bcd2d3d42869d36310dc9369636329907fd20"
 
     strings:
-        // Light file-type anchor: these are served HTML doorway pages.
+        // Light file-type anchor: these are served HTML doorway pages. Either marker
+        // satisfies it -- requiring the doctype alone made the whole rule, branch (a)
+        // included, miss a doorway page served without one, which is both common and a
+        // one-line edit for the operator.
         $doctype = "<!DOCTYPE html" ascii nocase
+        $html_open = "<html" ascii nocase
 
         // Campaign doorway-generator host: <brand>.guncelgiris<year>.club
         // (e.g. teosbet.guncelgiris2026.club). This host scheme is the
@@ -46,7 +50,7 @@ rule HTML_SEO_Spam_Teosbet_CUST {
         $tpl_vip      = /<!--\s*VIP AVANTAJLAR\s*-->/ ascii
 
     condition:
-        filesize < 2MB and $doctype and
+        filesize < 2MB and 1 of ($doctype, $html_open) and
         (
             // (a) campaign doorway host + a gambling brand -> conclusive
             ($doorway_host and 1 of ($brand_teosbet, $brand_realbahis))

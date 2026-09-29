@@ -27,11 +27,17 @@ rule PHP_NOX_Cloak_Shell_CUST {
         $wpmc_gate = /\$_GET\s*\[\s*['"]wpmc['"]\s*\]\s*===?\s*['"]1['"]/ ascii
         // Self-rewriting single-file token auth: compare a hardcoded CONST hash
         // against sha256 of the request token
+        // hash_equals() takes its arguments in either order without changing
+        // behaviour, so both are matched; keying on one of them let a swap of the
+        // two arguments silence this branch.
         $token_auth = /hash_equals\(\s*_?[A-Z][A-Z0-9_]{3,}\s*,\s*hash\(\s*['"]sha256['"]\s*,/ ascii
+        $token_auth_rev = /hash_equals\(\s*hash\(\s*['"]sha256['"]\s*,[^;]{0,160}\)\s*,\s*_?[A-Z][A-Z0-9_]{3,}/ ascii
         // Self-modifying persistence: rewrites its own file and force-invalidates
-        // OPcache so the next request sees the new copy
-        $self_write = "file_put_contents(__FILE__" ascii
-        $opcache_self = "opcache_invalidate(__FILE__" ascii
+        // OPcache so the next request sees the new copy. Whitespace-tolerant for the
+        // same reason as $wpmc_gate above -- as bare literals, a single space after
+        // the opening parenthesis defeated branch (c).
+        $self_write = /file_put_contents\s*\(\s*__FILE__/ ascii
+        $opcache_self = /opcache_invalidate\s*\(\s*__FILE__/ ascii
 
     condition:
         // PHP marker, but not anchored at byte zero: PHP enters code mode wherever the
@@ -44,7 +50,7 @@ rule PHP_NOX_Cloak_Shell_CUST {
             2 of ($nox_hash, $nox_prepend, $nox_panel, $render_orig, $cloak_comment)
             or
             // (b) self-rewriting single-file token auth + hidden panel gate
-            ($token_auth and $wpmc_gate)
+            (1 of ($token_auth, $token_auth_rev) and $wpmc_gate)
             or
             // (c) self-modifying persistence that plants a NOX render-prepend
             ($self_write and $opcache_self and 1 of ($nox_render, $nox_prepend, $nox_panel))
