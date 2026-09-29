@@ -26,14 +26,30 @@ rule HTML_SEO_Spam_Teosbet_CUST {
         // non-ASCII inside a regex class, which YARA-X rejects)
         $kw_meta = /name="keywords"[^>]{0,200}Teosbet[^>]{0,200}Realbahis/ ascii nocase
 
+        // Doorway-generator template artifact: the page is laid out from a fixed set of
+        // uppercase, accent-stripped Turkish section comments (CEKIM GARANTIISI -- the
+        // generator's own typo -- EK BILGI BOLUMU, GUVENLIK REHBERI, LISANS DOGRULAMA,
+        // SSS, VIP AVANTAJLAR). Editorial copy about a betting brand does not carry a
+        // structural comment scaffold like this: the sample holds 13, while 0 of 400
+        // real HTML files on hand hold more than 5.
+        $tpl_section = /<!-- [A-Z][A-Z0-9 \/]{2,40} -->/ ascii
+
     condition:
         filesize < 2MB and $doctype and
         (
             // (a) campaign doorway host + a gambling brand -> conclusive
             ($doorway_host and 1 of ($brand_teosbet, $brand_realbahis))
             or
-            // (b) heavy Teosbet doorway branding + Realbahis pairing + login
-            //     phrasing, resilient if the doorway host rotates away
-            (#brand_teosbet > 10 and $brand_realbahis and 1 of ($tr_login, $kw_meta))
+            // (b) heavy Teosbet doorway branding + Realbahis pairing + login phrasing,
+            //     resilient if the doorway host rotates away. Brand frequency alone does
+            //     not establish compromise -- a consumer-comparison article naming the
+            //     brand repeatedly satisfied the first three clauses -- so this branch
+            //     also requires the generator's section-comment scaffold, which is a
+            //     property of the doorway template rather than of the subject matter.
+            (
+                #brand_teosbet > 10 and $brand_realbahis and
+                1 of ($tr_login, $kw_meta) and
+                #tpl_section > 5
+            )
         )
 }

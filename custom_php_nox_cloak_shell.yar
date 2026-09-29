@@ -34,7 +34,11 @@ rule PHP_NOX_Cloak_Shell_CUST {
         $opcache_self = "opcache_invalidate(__FILE__" ascii
 
     condition:
-        filesize < 3MB and $php at 0 and
+        // PHP marker, but not anchored at byte zero: PHP enters code mode wherever the
+        // opening tag appears, so a UTF-8 BOM, a stray newline or leading HTML -- all
+        // confirmed to still execute against PHP 8.3 -- would otherwise disable every
+        // branch below, which a single prepended newline makes trivial to arrange.
+        filesize < 3MB and $php and
         (
             // (a) NOX family literals -- highest confidence
             2 of ($nox_hash, $nox_prepend, $nox_panel, $render_orig, $cloak_comment)
