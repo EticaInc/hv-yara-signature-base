@@ -27,12 +27,23 @@ rule HTML_SEO_Spam_Teosbet_CUST {
         $kw_meta = /name="keywords"[^>]{0,200}Teosbet[^>]{0,200}Realbahis/ ascii nocase
 
         // Doorway-generator template artifact: the page is laid out from a fixed set of
-        // uppercase, accent-stripped Turkish section comments (CEKIM GARANTIISI -- the
-        // generator's own typo -- EK BILGI BOLUMU, GUVENLIK REHBERI, LISANS DOGRULAMA,
-        // SSS, VIP AVANTAJLAR). Editorial copy about a betting brand does not carry a
-        // structural comment scaffold like this: the sample holds 13, while 0 of 400
-        // real HTML files on hand hold more than 5.
-        $tpl_section = /<!-- [A-Z][A-Z0-9 \/]{2,40} -->/ ascii
+        // uppercase, accent-stripped Turkish section labels. These are the specific
+        // labels the generator emits, not a count of uppercase comments -- counting the
+        // generic shape let six ordinary section comments (HEADER, NAVIGATION, MAIN
+        // CONTENT, ...), or six repetitions of one comment, stand in for the template.
+        // Only the brand-independent labels are listed, so this keeps working when the
+        // campaign rotates its brand, which is the case branch (b) exists to cover.
+        // Whitespace-tolerant, so ordinary reformatting of the comment does not defeat
+        // them. CEKIM GARANTIISI carries the generator's own doubled-I typo.
+        $tpl_cekim    = /<!--\s*CEKIM GARANTIISI\s*-->/ ascii
+        $tpl_ekbilgi  = /<!--\s*EK BILGI BOLUMU\s*-->/ ascii
+        $tpl_guvenlik = /<!--\s*GUVENLIK REHBERI\s*-->/ ascii
+        $tpl_hero     = /<!--\s*HERO \/ ANA SAYFA\s*-->/ ascii
+        $tpl_iliskili = /<!--\s*ILISKILI MAKALELER\s*-->/ ascii
+        $tpl_lisans   = /<!--\s*LISANS DOGRULAMA\s*-->/ ascii
+        $tpl_mobil    = /<!--\s*MOBIL ERISIM\s*-->/ ascii
+        $tpl_sss      = /<!--\s*SSS\s*-->/ ascii
+        $tpl_vip      = /<!--\s*VIP AVANTAJLAR\s*-->/ ascii
 
     condition:
         filesize < 2MB and $doctype and
@@ -49,7 +60,7 @@ rule HTML_SEO_Spam_Teosbet_CUST {
             (
                 #brand_teosbet > 10 and $brand_realbahis and
                 1 of ($tr_login, $kw_meta) and
-                #tpl_section > 5
+                3 of ($tpl_*)
             )
         )
 }
