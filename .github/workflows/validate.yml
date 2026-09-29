@@ -15,6 +15,9 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          # lint-rules.py diffs against the base branch, which needs history.
+          fetch-depth: 0
 
       - name: Install YARA-X CLI
         env:
@@ -32,3 +35,20 @@ jobs:
 
       - name: Validate rules
         run: bash scripts/validate-rules.sh
+
+      - name: Self-test the rule linter
+        run: python3 scripts/test-lint-rules.py
+
+      - name: Lint changed rules
+        # Blocking, but only for rules this change adds or touches. A warning is
+        # answered either by fixing it or by writing
+        # `// lint: allow <ID> - <reason>` in the rule.
+        run: |
+          base="${{ github.event.pull_request.base.sha || 'HEAD~1' }}"
+          python3 scripts/lint-rules.py --changed-since "$base" --strict
+
+      - name: Report the whole-repo lint backlog
+        # Advisory only: never fails the build. Existing findings are worked off
+        # deliberately rather than in a flag day.
+        if: always()
+        run: python3 scripts/lint-rules.py --all
