@@ -59,18 +59,21 @@ rule PHP_WP_EtherHiding_ContentProfiler_CUST {
         )
         or
         // config.bin: headerless 8-byte repeating XOR key at offset 0, plaintext '<?php'.
-        // The branch turns on whether the container decodes, not on what the key's own
-        // bytes happen to be -- a key that begins '<?php', or one with leading zero
-        // bytes, decodes like any other and is matched.
+        // The branch turns on whether the body decodes to PHP source, never on what the
+        // key's own bytes happen to be: a key that begins '<?php', or one with any number
+        // of leading zero bytes, is treated exactly like any other.
         (
-            filesize > 16 and filesize < 2MB and
+            // The floor is what the structural check below needs to have anything to work
+            // on: a payload of at least 128 bytes. It applies to every key alike, and sits
+            // far below any real payload -- the shipped one is 9946 bytes of PHP source.
+            filesize > 136 and filesize < 2MB and
             (uint8(8) ^ uint8(0)) == 0x3c and    // '<'
             (uint8(9) ^ uint8(1)) == 0x3f and    // '?'
             (uint8(10) ^ uint8(2)) == 0x70 and   // 'p'
             (uint8(11) ^ uint8(3)) == 0x68 and   // 'h'
             (uint8(12) ^ uint8(4)) == 0x70 and   // 'p'
-            // PHP opens a script only on '<?php' followed by whitespace, so key byte 5
-            // is checked against a plaintext byte the language itself pins down.
+            // PHP opens a script only on '<?php' followed by whitespace, so this byte is
+            // pinned down by the language rather than by anything the operator chooses.
             (
                 (uint8(13) ^ uint8(5)) == 0x20 or (uint8(13) ^ uint8(5)) == 0x09 or
                 (uint8(13) ^ uint8(5)) == 0x0a or (uint8(13) ^ uint8(5)) == 0x0d
@@ -78,14 +81,21 @@ rule PHP_WP_EtherHiding_ContentProfiler_CUST {
             // An all-zero key is not a key: it leaves the payload in the clear, so such a
             // file is an ordinary zero-padded-header PHP file, not a packed container.
             (uint32(0) != 0 or uint32(4) != 0) and
-            // Only when the key's first five bytes are zero does the payload's '<?php'
-            // sit in the file in the clear -- which is also exactly what a benign 8-byte
-            // binary header in front of plaintext PHP looks like. Those two are
-            // indistinguishable byte for byte, so in that one case require the body to
-            // actually be enciphered. Every other key matches on the decode alone.
-            (
-                uint32be(0) != 0 or uint8(4) != 0 or
-                math.entropy(8, filesize - 8) > 5.0
+            // Structural validation of the decoded body: every byte of the first 1024 -- or
+            // of the whole payload, if it is shorter -- must decode to PHP source text.
+            // The key repeats every 8 bytes, so each key byte is exercised about 128 times
+            // over that window. That is what separates a container whose key merely
+            // opens with zero bytes from a benign file carrying an 8-byte binary header in
+            // front of plaintext PHP: there only the zero-valued header bytes decode
+            // cleanly, and the nonzero ones fall out of range on the first newline or
+            // punctuation they land on. The payload is PHP source, so this holds for any
+            // key; it is not a property of how compressible the body happens to be.
+            for all i in (6..(math.min(1023, filesize - 9))) : (
+                ((uint8(8 + i) ^ uint8(i % 8)) >= 0x20 and
+                 (uint8(8 + i) ^ uint8(i % 8)) <= 0x7e)
+                or (uint8(8 + i) ^ uint8(i % 8)) == 0x09    // tab
+                or (uint8(8 + i) ^ uint8(i % 8)) == 0x0a    // LF
+                or (uint8(8 + i) ^ uint8(i % 8)) == 0x0d    // CR
             )
         )
 }
