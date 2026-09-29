@@ -1,3 +1,5 @@
+import "math"
+
 rule PHP_WP_EtherHiding_ContentProfiler_CUST {
     meta:
         description = "Detects a fake WordPress performance plugin ('Advanced Content Profiler' / 'Core Studio') that injects a malicious client-side script and resolves its C2 from the Polygon blockchain (EtherHiding). The plugin stub self-assembles: an 8-byte-XOR-keyed blob under storage/ is decoded and written out as inc/class-handler.php on first run, so the readable PHP backdoor is absent until the plugin executes once. The handler unpacks a '6TVP' magic container (XOR, reversed, raw-deflate) holding the JavaScript payload, then injects it at wp_footer while skipping logged-in administrator, editor and author sessions and roughly eighteen crawler user agents. C2 is read from a smart contract via eth_call against several public Polygon RPC endpoints, with a hardcoded fallback host, and a heartbeat beacon reports domain, PHP and WordPress versions and plugin count. Also matches the two encrypted container formats on their own, so the payload is still caught where the PHP loader has already been cleaned. Distinct from PHP_WP_Polygon_EtherHiding_Loader_CUST, which covers the 'Speed Optimizer' build of the same technique: that build resolves the chain lookup in JavaScript and injects at wp_head/admin_head using a string-reversal and unicode-escaped-property obfuscation kit, whereas this one resolves it server-side in PHP, injects at wp_footer, uses three-way split-string concatenation, and ships its payload in a '6TVP' container with a self-assembling dropper. Neither rule matches the other's sample, so the two do not double-count. Unrelated to the scatter stub and WPM mu-plugin RAT families."
@@ -57,15 +59,33 @@ rule PHP_WP_EtherHiding_ContentProfiler_CUST {
         )
         or
         // config.bin: headerless 8-byte repeating XOR key at offset 0, plaintext '<?php'.
+        // The branch turns on whether the container decodes, not on what the key's own
+        // bytes happen to be -- a key that begins '<?php', or one with leading zero
+        // bytes, decodes like any other and is matched.
         (
             filesize > 16 and filesize < 2MB and
-            // An all-zero key leaves the payload in the clear, so plaintext PHP at
-            // offset 8 is an ordinary zero-padded-header file, not a packed container.
-            not $php at 0 and not $php at 8 and
-            (uint8(8) ^ uint8(0)) == 0x3c and
-            (uint8(9) ^ uint8(1)) == 0x3f and
-            (uint8(10) ^ uint8(2)) == 0x70 and
-            (uint8(11) ^ uint8(3)) == 0x68 and
-            (uint8(12) ^ uint8(4)) == 0x70
+            (uint8(8) ^ uint8(0)) == 0x3c and    // '<'
+            (uint8(9) ^ uint8(1)) == 0x3f and    // '?'
+            (uint8(10) ^ uint8(2)) == 0x70 and   // 'p'
+            (uint8(11) ^ uint8(3)) == 0x68 and   // 'h'
+            (uint8(12) ^ uint8(4)) == 0x70 and   // 'p'
+            // PHP opens a script only on '<?php' followed by whitespace, so key byte 5
+            // is checked against a plaintext byte the language itself pins down.
+            (
+                (uint8(13) ^ uint8(5)) == 0x20 or (uint8(13) ^ uint8(5)) == 0x09 or
+                (uint8(13) ^ uint8(5)) == 0x0a or (uint8(13) ^ uint8(5)) == 0x0d
+            ) and
+            // An all-zero key is not a key: it leaves the payload in the clear, so such a
+            // file is an ordinary zero-padded-header PHP file, not a packed container.
+            (uint32(0) != 0 or uint32(4) != 0) and
+            // Only when the key's first five bytes are zero does the payload's '<?php'
+            // sit in the file in the clear -- which is also exactly what a benign 8-byte
+            // binary header in front of plaintext PHP looks like. Those two are
+            // indistinguishable byte for byte, so in that one case require the body to
+            // actually be enciphered. Every other key matches on the decode alone.
+            (
+                uint32be(0) != 0 or uint8(4) != 0 or
+                math.entropy(8, filesize - 8) > 5.0
+            )
         )
 }
