@@ -1,5 +1,3 @@
-import "math"
-
 rule PHP_WP_EtherHiding_ContentProfiler_CUST {
     meta:
         description = "Detects a fake WordPress performance plugin ('Advanced Content Profiler' / 'Core Studio') that injects a malicious client-side script and resolves its C2 from the Polygon blockchain (EtherHiding). The plugin stub self-assembles: an 8-byte-XOR-keyed blob under storage/ is decoded and written out as inc/class-handler.php on first run, so the readable PHP backdoor is absent until the plugin executes once. The handler unpacks a '6TVP' magic container (XOR, reversed, raw-deflate) holding the JavaScript payload, then injects it at wp_footer while skipping logged-in administrator, editor and author sessions and roughly eighteen crawler user agents. C2 is read from a smart contract via eth_call against several public Polygon RPC endpoints, with a hardcoded fallback host, and a heartbeat beacon reports domain, PHP and WordPress versions and plugin count. Also matches the two encrypted container formats on their own, so the payload is still caught where the PHP loader has already been cleaned. Distinct from PHP_WP_Polygon_EtherHiding_Loader_CUST, which covers the 'Speed Optimizer' build of the same technique: that build resolves the chain lookup in JavaScript and injects at wp_head/admin_head using a string-reversal and unicode-escaped-property obfuscation kit, whereas this one resolves it server-side in PHP, injects at wp_footer, uses three-way split-string concatenation, and ships its payload in a '6TVP' container with a self-assembling dropper. Neither rule matches the other's sample, so the two do not double-count. Unrelated to the scatter stub and WPM mu-plugin RAT families."
@@ -59,43 +57,38 @@ rule PHP_WP_EtherHiding_ContentProfiler_CUST {
         )
         or
         // config.bin: headerless 8-byte repeating XOR key at offset 0, plaintext '<?php'.
-        // The branch turns on whether the body decodes to PHP source, never on what the
-        // key's own bytes happen to be: a key that begins '<?php', or one with any number
-        // of leading zero bytes, is treated exactly like any other.
+        // Both anchors are pinned outside the operator's control, so no behaviour-
+        // preserving edit to the payload evades them: the dropper itself validates the
+        // decoded blob with strpos($out,'<?php')===0, and PHP enters code mode only when
+        // '<?php' is followed by tab, LF, CR or space -- verified exhaustively over all
+        // 256 byte values against PHP 8.3, which treats every other byte as literal text.
+        //
+        // No check on the rest of the decoded body. Three were tried during review and
+        // each was a detection gap rather than a guard: rejecting a plaintext '<?php' at
+        // offset 8 dropped keys with five leading zero bytes, an entropy floor dropped
+        // short or repetitive payloads, and requiring the decoded window to be source
+        // text let one UTF-8 or control byte in a comment turn the rule off. Any
+        // "every decoded byte is in set S" test is defeated by inserting a byte outside
+        // S, and PHP comments make that free. Of 109,709 real files on hand, zero satisfy
+        // even the decode equality below, and zero carry the benign shape those guards
+        // were aimed at (an 8-byte binary header in front of plaintext PHP), so the FP
+        // they defended against is unobserved while the gaps they opened were real. If
+        // such a file ever does turn up, it belongs in the scanner's
+        // FALSE_POSITIVES_CONTENT_GATED, which exists for exactly this, not back here.
         (
-            // The floor is what the structural check below needs to have anything to work
-            // on: a payload of at least 128 bytes. It applies to every key alike, and sits
-            // far below any real payload -- the shipped one is 9946 bytes of PHP source.
-            filesize > 136 and filesize < 2MB and
+            filesize > 16 and filesize < 2MB and
             (uint8(8) ^ uint8(0)) == 0x3c and    // '<'
             (uint8(9) ^ uint8(1)) == 0x3f and    // '?'
             (uint8(10) ^ uint8(2)) == 0x70 and   // 'p'
             (uint8(11) ^ uint8(3)) == 0x68 and   // 'h'
             (uint8(12) ^ uint8(4)) == 0x70 and   // 'p'
-            // PHP opens a script only on '<?php' followed by whitespace, so this byte is
-            // pinned down by the language rather than by anything the operator chooses.
             (
                 (uint8(13) ^ uint8(5)) == 0x20 or (uint8(13) ^ uint8(5)) == 0x09 or
                 (uint8(13) ^ uint8(5)) == 0x0a or (uint8(13) ^ uint8(5)) == 0x0d
             ) and
-            // An all-zero key is not a key: it leaves the payload in the clear, so such a
-            // file is an ordinary zero-padded-header PHP file, not a packed container.
-            (uint32(0) != 0 or uint32(4) != 0) and
-            // Structural validation of the decoded body: every byte of the first 1024 -- or
-            // of the whole payload, if it is shorter -- must decode to PHP source text.
-            // The key repeats every 8 bytes, so each key byte is exercised about 128 times
-            // over that window. That is what separates a container whose key merely
-            // opens with zero bytes from a benign file carrying an 8-byte binary header in
-            // front of plaintext PHP: there only the zero-valued header bytes decode
-            // cleanly, and the nonzero ones fall out of range on the first newline or
-            // punctuation they land on. The payload is PHP source, so this holds for any
-            // key; it is not a property of how compressible the body happens to be.
-            for all i in (6..(math.min(1023, filesize - 9))) : (
-                ((uint8(8 + i) ^ uint8(i % 8)) >= 0x20 and
-                 (uint8(8 + i) ^ uint8(i % 8)) <= 0x7e)
-                or (uint8(8 + i) ^ uint8(i % 8)) == 0x09    // tab
-                or (uint8(8 + i) ^ uint8(i % 8)) == 0x0a    // LF
-                or (uint8(8 + i) ^ uint8(i % 8)) == 0x0d    // CR
-            )
+            // An all-zero key applies no cipher, so the payload is in the clear and the
+            // file is an ordinary PHP file behind a zero-padded header, not a container.
+            // Such a file is the loader branch's business, not this one's.
+            (uint32(0) != 0 or uint32(4) != 0)
         )
 }
