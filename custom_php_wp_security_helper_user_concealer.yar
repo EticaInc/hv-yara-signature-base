@@ -45,7 +45,12 @@ rule PHP_WP_SecurityHelper_UserConcealer_CUST {
 
     condition:
         filesize < 200KB and
-        $php at 0 and
+        // PHP marker, but not anchored at byte zero: PHP enters code mode wherever the
+        // opening tag appears, so a UTF-8 BOM, a stray newline or leading HTML -- all
+        // confirmed to still execute against PHP 8.3 -- would otherwise disable every
+        // branch below. The string combinations are specific enough to carry the
+        // file-type anchor without the offset.
+        $php and
         (
             // (a) High-confidence family fingerprint on the build's unique names.
             (
