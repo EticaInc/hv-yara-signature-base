@@ -1,15 +1,25 @@
 # Contributing
 
-Submit rule changes through a pull request. Keep each change focused on one
-threat family or exploit type and include the evidence needed for reviewers to
-understand the detection without including malware samples or customer data.
+One pull request, one threat family. Include enough evidence for a reviewer to understand the
+detection, and never include malware samples or customer data.
 
-Before opening the pull request:
+Before opening a pull request:
 
-1. Run `bash scripts/validate-rules.sh` with YARA-X CLI 1.9.0.
-2. Test the rule recursively against approved malicious and benign fixtures.
-3. Confirm that every matched string is safe to expose in source control.
-4. Document expected matches and false-positive testing in the pull request.
+1. **Add fixtures alongside the rule.** At least one positive per condition branch, plus a
+   negative that pins any `n of` threshold. See `tests/README.md`.
 
-False-positive exceptions belong in each scanner's suppression configuration,
-not in this repository.
+2. **Run the three checks** with YARA-X CLI 1.9.0:
+
+   ```bash
+   bash scripts/validate-rules.sh
+   bash tests/run-rule-tests.sh
+   python3 scripts/check-identifiers.py
+   ```
+
+3. **Confirm every string is safe to publish.** This repository is public. Attacker
+   infrastructure belongs here; the environment a sample was found in does not.
+
+4. **Describe expected matches and false-positive testing** in the pull request body.
+
+CI runs the same three checks on every pull request. False-positive exceptions belong in each
+scanner's suppression configuration, not in this repository.
