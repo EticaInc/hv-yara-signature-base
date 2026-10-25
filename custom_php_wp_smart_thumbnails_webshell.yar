@@ -44,3 +44,70 @@ rule PHP_WP_Smart_Thumbnails_Webshell_CUST
             (3 of ($param_*) and $set_auth_cookie and 2 of ($behavior_*))
         )
 }
+
+// Advisory-based coverage: the published hash identifies the packed stage.
+rule PHP_WP_Smart_Thumbnails_Packed_Dropper_CUST
+{
+    meta:
+        description = "Detects the packed WP Smart Thumbnails dropper using an inverted WordPress guard and custom stream-wrapper execution"
+        author = "Security Team"
+        family = "WP_Smart_Thumbnails_Webshell"
+        severity = "CRITICAL"
+        date = "2026-10-25"
+        hash = "ccc95113334357c2a3671aae12043bff00020858cec115f7e724fe43e9f1fc24"
+        reference = "https://patchstack.com/articles/four-ways-back-in-the-wordpress-xss-campaign-that-hides-its-own-admin-account/"
+
+    strings:
+        $php = "<?php" ascii
+        $guard = /\bif\s*\(\s*defined\s*\(\s*['"]ABSPATH['"]\s*\)\s*\)\s*\{\s*return\s*;\s*\}/ ascii
+        $comment = "WP plugin load: do not run shell" ascii
+        $plugin_name = "WP Smart Thumbnails" ascii
+        $plugin_author = "MediaPress Labs" ascii
+        $stream_uri = "dyiv://" ascii
+        $stream_register = "stream_wrapper_register" ascii fullword
+
+        // Transform names inferred from the advisory's decoding description.
+        // MD5 is an integrity check, not a decoding operation.
+        $decode_base64 = "base64_decode" ascii fullword
+        $decode_uncompress = "gzuncompress" ascii fullword
+        $decode_rot13 = "str_rot13" ascii fullword
+        $decode_reverse = "strrev" ascii fullword
+
+    condition:
+        filesize < 100KB and
+        $php and
+        (
+            ($stream_uri and $stream_register and $decode_uncompress) or
+            ($guard and $comment) or
+            ($guard and $plugin_name and $plugin_author and 2 of ($decode_*)) or
+            ($guard and $stream_register and $decode_uncompress and $decode_rot13 and $decode_reverse)
+        )
+}
+
+// Covers PHP-tagged unpacked copies; the advisory provides no unpacked hash.
+rule PHP_WP_Smart_Thumbnails_Moon_FileManager_CUST
+{
+    meta:
+        description = "Detects the unpacked WP Smart Thumbnails unauthenticated Moon file manager with JSON file-operation actions"
+        author = "Security Team"
+        family = "WP_Smart_Thumbnails_Webshell"
+        severity = "CRITICAL"
+        date = "2026-10-25"
+        source_hash = "ccc95113334357c2a3671aae12043bff00020858cec115f7e724fe43e9f1fc24"
+        reference = "https://patchstack.com/articles/four-ways-back-in-the-wordpress-xss-campaign-that-hides-its-own-admin-account/"
+
+    strings:
+        $php = "<?php" ascii
+        $title = "Moon, tell me if I could" ascii
+        $action_upload = "upload" ascii fullword
+        $action_delete = "delete" ascii fullword
+        $action_rename = "rename" ascii fullword
+        $action_mkdir = "mkdir" ascii fullword
+        $action_save = "save" ascii fullword
+
+    condition:
+        filesize < 150KB and
+        $php and
+        $title and
+        3 of ($action_*)
+}
